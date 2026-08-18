@@ -1,1 +1,50 @@
-@import "tailwindcss"; 
+@import "tailwindcss";
+
+/* Design tokens — teal/orange "flat design" system generated for this product type */
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  --color-primary: #0d9488;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #14b8a6;
+  --color-secondary-foreground: #0f172a;
+  --color-accent: #ea580c;
+  --color-accent-foreground: #ffffff;
+
+  --color-background: #f0fdfa;
+  --color-foreground: #134e4a;
+
+  --color-card: #ffffff;
+  --color-card-foreground: #134e4a;
+
+  --color-muted: #e8f1f4;
+  --color-muted-foreground: #475569;
+
+  --color-border: #99f6e4;
+  --color-ring: #0d9488;
+
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+}
+
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
