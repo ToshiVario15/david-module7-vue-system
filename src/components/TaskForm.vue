@@ -1,199 +1,152 @@
 <script setup>
-import { reactive, ref, watch } from 'vue'
-import { STATUS_OPTIONS, validateTask } from '../utils/validators.js'
+import { reactive, watch, ref } from 'vue'
+import { validateTask, isValid } from '../utils/validators.js'
+import TaskFormFields from './TaskFormFields.vue'
 
 const props = defineProps({
-  editingTask: { type: Object, default: null },
+  // When editing, pass the existing task; null/undefined means "create" mode.
+  task: { type: Object, default: null },
+  // Renders as a centered modal dialog (used for editing) vs. an inline card (used for creating).
+  isModal: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['submit', 'cancel'])
 
-const emptyForm = () => ({
-  title: '',
-  description: '',
-  subject: '',
-  dueDate: '',
-  status: 'Pending',
-})
+const STATUS_OPTIONS = ['Pending', 'In Progress', 'Completed']
+
+function emptyForm() {
+  return {
+    title: '',
+    description: '',
+    subject: '',
+    dueDate: '',
+    status: 'Pending',
+  }
+}
 
 const form = reactive(emptyForm())
-const errors = ref({})
-const touched = ref({})
+const errors = reactive({})
+const submitAttempted = ref(false)
 
-// Populate the form when an existing task is passed in for editing,
-// and reset it back to blank when editing ends.
-watch(
-  () => props.editingTask,
-  (task) => {
-    errors.value = {}
-    touched.value = {}
-    if (task) {
-      form.title = task.title
-      form.description = task.description
-      form.subject = task.subject
-      form.dueDate = task.dueDate
-      form.status = task.status
-    } else {
-      Object.assign(form, emptyForm())
-    }
-  },
-  { immediate: true }
-)
+function syncFromTask() {
+  const source = props.task
+  const base = source
+    ? {
+        title: source.title,
+        description: source.description,
+        subject: source.subject,
+        dueDate: source.dueDate,
+        status: source.status,
+      }
+    : emptyForm()
+  Object.assign(form, base)
+  Object.keys(errors).forEach((k) => delete errors[k])
+  submitAttempted.value = false
+}
 
-function markTouched(field) {
-  touched.value[field] = true
+watch(() => props.task, syncFromTask, { immediate: true })
+
+function validateField(field) {
+  const fieldErrors = validateTask(form)
+  if (fieldErrors[field]) {
+    errors[field] = fieldErrors[field]
+  } else {
+    delete errors[field]
+  }
 }
 
 function handleSubmit() {
-  const { valid, errors: validationErrors } = validateTask(form)
-  errors.value = validationErrors
-  touched.value = { title: true, subject: true, dueDate: true, description: true, status: true }
+  submitAttempted.value = true
+  const fieldErrors = validateTask(form)
+  Object.keys(errors).forEach((k) => delete errors[k])
+  Object.assign(errors, fieldErrors)
 
-  if (!valid) return
+  if (!isValid(fieldErrors)) return
 
   emit('submit', { ...form })
 
-  if (!props.editingTask) {
+  if (!props.isModal) {
+    // Reset the inline create form after a successful submit.
     Object.assign(form, emptyForm())
-    touched.value = {}
-    errors.value = {}
+    submitAttempted.value = false
   }
 }
 
 function handleCancel() {
-  Object.assign(form, emptyForm())
-  errors.value = {}
-  touched.value = {}
   emit('cancel')
 }
 </script>
 
 <template>
-  <form
-    novalidate
-    @submit.prevent="handleSubmit"
-    class="space-y-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6"
+  <!-- Modal wrapper (edit mode) -->
+  <div
+    v-if="isModal"
+    class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="task-form-title"
+    @keydown.esc="handleCancel"
   >
-    <div class="flex items-center justify-between">
-      <h2 class="text-base font-semibold text-foreground">
-        {{ editingTask ? 'Edit task' : 'Add a new task' }}
-      </h2>
-      <span v-if="editingTask" class="rounded-full bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent">
-        Editing
-      </span>
-    </div>
-
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <div class="sm:col-span-2">
-        <label for="title" class="mb-1 block text-sm font-medium text-foreground">
-          Title <span class="text-destructive">*</span>
-        </label>
-        <input
-          id="title"
-          v-model="form.title"
-          type="text"
-          maxlength="100"
-          placeholder="e.g. Finish lab report"
-          @blur="markTouched('title')"
-          :aria-invalid="Boolean(touched.title && errors.title)"
-          aria-describedby="title-error"
-          class="w-full rounded-lg border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-ring"
-          :class="touched.title && errors.title ? 'border-destructive' : 'border-border'"
-        />
-        <p v-if="touched.title && errors.title" id="title-error" class="mt-1 text-xs text-destructive">
-          {{ errors.title }}
-        </p>
-      </div>
-
-      <div>
-        <label for="subject" class="mb-1 block text-sm font-medium text-foreground">
-          Subject <span class="text-destructive">*</span>
-        </label>
-        <input
-          id="subject"
-          v-model="form.subject"
-          type="text"
-          maxlength="60"
-          placeholder="e.g. Chemistry"
-          @blur="markTouched('subject')"
-          :aria-invalid="Boolean(touched.subject && errors.subject)"
-          aria-describedby="subject-error"
-          class="w-full rounded-lg border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-ring"
-          :class="touched.subject && errors.subject ? 'border-destructive' : 'border-border'"
-        />
-        <p v-if="touched.subject && errors.subject" id="subject-error" class="mt-1 text-xs text-destructive">
-          {{ errors.subject }}
-        </p>
-      </div>
-
-      <div>
-        <label for="dueDate" class="mb-1 block text-sm font-medium text-foreground">
-          Due date <span class="text-destructive">*</span>
-        </label>
-        <input
-          id="dueDate"
-          v-model="form.dueDate"
-          type="date"
-          @blur="markTouched('dueDate')"
-          :aria-invalid="Boolean(touched.dueDate && errors.dueDate)"
-          aria-describedby="dueDate-error"
-          class="w-full rounded-lg border bg-background px-3 py-2.5 text-sm text-foreground transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-ring"
-          :class="touched.dueDate && errors.dueDate ? 'border-destructive' : 'border-border'"
-        />
-        <p v-if="touched.dueDate && errors.dueDate" id="dueDate-error" class="mt-1 text-xs text-destructive">
-          {{ errors.dueDate }}
-        </p>
-      </div>
-
-      <div class="sm:col-span-2">
-        <label for="description" class="mb-1 block text-sm font-medium text-foreground"> Description </label>
-        <textarea
-          id="description"
-          v-model="form.description"
-          rows="3"
-          maxlength="500"
-          placeholder="Add any extra notes (optional)"
-          @blur="markTouched('description')"
-          :aria-invalid="Boolean(touched.description && errors.description)"
-          aria-describedby="description-error"
-          class="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-ring"
-          :class="touched.description && errors.description ? 'border-destructive' : 'border-border'"
-        ></textarea>
-        <div class="mt-1 flex items-center justify-between">
-          <p v-if="touched.description && errors.description" id="description-error" class="text-xs text-destructive">
-            {{ errors.description }}
-          </p>
-          <p class="ml-auto text-xs text-muted-foreground">{{ form.description.length }}/500</p>
-        </div>
-      </div>
-
-      <div class="sm:col-span-2">
-        <label for="status" class="mb-1 block text-sm font-medium text-foreground">Status</label>
-        <select
-          id="status"
-          v-model="form.status"
-          class="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-ring"
+    <div class="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[92vh] overflow-y-auto">
+      <div class="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-100 sticky top-0 bg-white">
+        <h2 id="task-form-title" class="text-base sm:text-lg font-semibold text-slate-900">Edit Task</h2>
+        <button
+          type="button"
+          class="w-9 h-9 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+          aria-label="Close edit dialog"
+          @click="handleCancel"
         >
-          <option v-for="option in STATUS_OPTIONS" :key="option" :value="option">{{ option }}</option>
-        </select>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+        </button>
+      </div>
+      <div class="px-5 sm:px-6 py-5">
+        <TaskFormFields
+          :form="form"
+          :errors="errors"
+          :status-options="STATUS_OPTIONS"
+          @field-blur="validateField"
+        />
+      </div>
+      <div class="flex gap-3 px-5 sm:px-6 py-4 border-t border-slate-100 sticky bottom-0 bg-white">
+        <button
+          type="button"
+          class="flex-1 h-11 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 active:scale-[0.98] transition"
+          @click="handleCancel"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="flex-1 h-11 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 active:scale-[0.98] transition shadow-sm"
+          @click="handleSubmit"
+        >
+          Save Changes
+        </button>
       </div>
     </div>
+  </div>
 
-    <div class="flex items-center gap-3 pt-1">
-      <button
-        type="submit"
-        class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 active:scale-[0.98]"
-      >
-        {{ editingTask ? 'Save changes' : 'Add task' }}
-      </button>
-      <button
-        v-if="editingTask"
-        type="button"
-        @click="handleCancel"
-        class="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-border bg-transparent px-4 py-2.5 text-sm font-semibold text-foreground transition hover:bg-muted"
-      >
-        Cancel
-      </button>
+  <!-- Inline card (create mode) -->
+  <section v-else class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6">
+    <div class="flex items-center gap-2 mb-4">
+      <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4.5 h-4.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+      </div>
+      <h2 class="text-base sm:text-lg font-semibold text-slate-900">Add New Task</h2>
     </div>
-  </form>
+    <TaskFormFields
+      :form="form"
+      :errors="errors"
+      :status-options="STATUS_OPTIONS"
+      @field-blur="validateField"
+    />
+    <button
+      type="button"
+      class="mt-5 w-full h-11 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 active:scale-[0.98] transition shadow-sm flex items-center justify-center gap-2"
+      @click="handleSubmit"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+      Add Task
+    </button>
+  </section>
 </template>

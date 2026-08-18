@@ -1,119 +1,108 @@
 <script setup>
-import { ref, computed, onBeforeUnmount } from 'vue'
-import AppHeader from './components/AppHeader.vue'
-import AppFooter from './components/AppFooter.vue'
-import AppAlert from './components/AppAlert.vue'
-import TaskForm from './components/TaskForm.vue'
-import TaskStats from './components/TaskStats.vue'
-import SearchBar from './components/SearchBar.vue'
-import TaskList from './components/TaskList.vue'
+import { ref } from 'vue'
 import { useTasks } from './composables/useTasks.js'
 
-const { tasks, taskCount, pendingCount, inProgressCount, completedCount, addTask, updateTask, deleteTask } =
-  useTasks()
+import AppHeader from './components/AppHeader.vue'
+import TaskForm from './components/TaskForm.vue'
+import TaskList from './components/TaskList.vue'
+import AppFooter from './components/AppFooter.vue'
+import NotificationList from './components/NotificationList.vue'
+import ConfirmDialog from './components/ConfirmDialog.vue'
 
-const searchQuery = ref('')
-const statusFilter = ref('All')
+const {
+  filteredTasks,
+  taskCounts,
+  searchQuery,
+  notifications,
+  dismissNotification,
+  createTask,
+  updateTask,
+  deleteTask,
+  setStatus,
+} = useTasks()
+
+// --- Edit modal state ---
 const editingTask = ref(null)
-const feedback = ref({ message: '', type: 'success' })
-let feedbackTimer = null
 
-function showFeedback(message, type = 'success') {
-  feedback.value = { message, type }
-  if (feedbackTimer) clearTimeout(feedbackTimer)
-  feedbackTimer = setTimeout(() => {
-    feedback.value = { message: '', type }
-  }, 3500)
-}
-
-function dismissFeedback() {
-  if (feedbackTimer) clearTimeout(feedbackTimer)
-  feedback.value = { ...feedback.value, message: '' }
-}
-
-onBeforeUnmount(() => {
-  if (feedbackTimer) clearTimeout(feedbackTimer)
-})
-
-const filteredTasks = computed(() => {
-  const query = searchQuery.value.trim().toLowerCase()
-  return tasks.value.filter((task) => {
-    const matchesStatus = statusFilter.value === 'All' || task.status === statusFilter.value
-    if (!matchesStatus) return false
-    if (!query) return true
-    return (
-      task.title.toLowerCase().includes(query) ||
-      task.subject.toLowerCase().includes(query) ||
-      task.description.toLowerCase().includes(query)
-    )
-  })
-})
-
-function handleSubmit(formData) {
-  if (editingTask.value) {
-    updateTask(editingTask.value.id, formData)
-    showFeedback('Task updated successfully.', 'success')
-    editingTask.value = null
-  } else {
-    addTask(formData)
-    showFeedback('Task added successfully.', 'success')
-  }
-}
-
-function handleEdit(task) {
+function openEdit(task) {
   editingTask.value = task
-  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
-
-function handleCancelEdit() {
+function closeEdit() {
   editingTask.value = null
 }
-
-function handleDelete(task) {
-  const confirmed = window.confirm(`Delete "${task.title}"? This can't be undone.`)
-  if (!confirmed) return
-  deleteTask(task.id)
-  if (editingTask.value?.id === task.id) editingTask.value = null
-  showFeedback('Task deleted.', 'error')
+function handleEditSubmit(payload) {
+  if (editingTask.value) {
+    updateTask(editingTask.value.id, payload)
+  }
+  closeEdit()
 }
 
-function handleStatusChange(id, status) {
-  updateTask(id, { status })
-  showFeedback('Status updated.', 'success')
+// --- Create ---
+function handleCreateSubmit(payload) {
+  createTask(payload)
+}
+
+// --- Delete confirmation state ---
+const pendingDelete = ref(null)
+
+function requestDelete(task) {
+  pendingDelete.value = task
+}
+function cancelDelete() {
+  pendingDelete.value = null
+}
+function confirmDelete() {
+  if (pendingDelete.value) {
+    deleteTask(pendingDelete.value.id)
+  }
+  pendingDelete.value = null
+}
+
+function handleStatusChange(task, status) {
+  setStatus(task.id, status)
 }
 </script>
 
 <template>
-  <div class="flex min-h-screen flex-col">
-    <AppHeader :pending-count="pendingCount" />
+  <div class="min-h-screen flex flex-col">
+    <AppHeader :counts="taskCounts" />
 
-    <main class="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8">
-      <AppAlert :message="feedback.message" :type="feedback.type" @dismiss="dismissFeedback" />
+    <main class="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <TaskForm :task="null" :is-modal="false" @submit="handleCreateSubmit" />
 
-      <TaskForm :editing-task="editingTask" @submit="handleSubmit" @cancel="handleCancelEdit" />
-
-      <TaskStats :total="taskCount" :pending="pendingCount" :in-progress="inProgressCount" :completed="completedCount" />
-
-      <section class="space-y-4">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 class="text-base font-semibold text-foreground">Your tasks</h2>
-          <span class="text-sm text-muted-foreground">
-            Showing {{ filteredTasks.length }} of {{ taskCount }} task{{ taskCount === 1 ? '' : 's' }}
-          </span>
-        </div>
-
-        <SearchBar v-model="searchQuery" v-model:status-filter="statusFilter" />
-
-        <TaskList
-          :tasks="filteredTasks"
-          :has-any-tasks="taskCount > 0"
-          @edit="handleEdit"
-          @delete="handleDelete"
-          @status-change="handleStatusChange"
-        />
-      </section>
+      <TaskList
+        :tasks="filteredTasks"
+        :total-count="taskCounts.total"
+        :search-query="searchQuery"
+        @update:search-query="(v) => (searchQuery = v)"
+        @edit="openEdit"
+        @delete="requestDelete"
+        @status-change="handleStatusChange"
+      />
     </main>
 
     <AppFooter />
+
+    <!-- Edit modal -->
+    <TaskForm
+      v-if="editingTask"
+      :task="editingTask"
+      :is-modal="true"
+      @submit="handleEditSubmit"
+      @cancel="closeEdit"
+    />
+
+    <!-- Delete confirmation -->
+    <ConfirmDialog
+      v-if="pendingDelete"
+      title="Delete this task?"
+      :message="`\u201c${pendingDelete.title}\u201d will be permanently removed. This can't be undone.`"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      @confirm="confirmDelete"
+      @cancel="cancelDelete"
+    />
+
+    <NotificationList :notifications="notifications" @dismiss="dismissNotification" />
   </div>
 </template>

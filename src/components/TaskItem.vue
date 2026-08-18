@@ -1,105 +1,87 @@
 <script setup>
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
   task: { type: Object, required: true },
 })
+
 const emit = defineEmits(['edit', 'delete', 'status-change'])
 
 const statusStyles = {
-  Pending: 'bg-muted text-muted-foreground border-border',
-  'In Progress': 'bg-primary/10 text-primary border-primary/30',
-  Completed: 'bg-secondary/10 text-secondary border-secondary/30',
+  Pending: 'bg-amber-100 text-amber-800',
+  'In Progress': 'bg-blue-100 text-blue-800',
+  Completed: 'bg-emerald-100 text-emerald-800',
 }
 
-function formatDate(value) {
-  if (!value) return '—'
-  const date = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-}
+const badgeClass = computed(() => statusStyles[props.task.status] || 'bg-slate-100 text-slate-700')
 
-function isOverdue(task) {
-  if (task.status === 'Completed' || !task.dueDate) return false
-  const due = new Date(`${task.dueDate}T23:59:59`)
-  return due.getTime() < Date.now()
-}
+const dueInfo = computed(() => {
+  if (!props.task.dueDate) return { label: '', overdue: false }
+  const due = new Date(props.task.dueDate + 'T00:00:00')
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const diffDays = Math.round((due - today) / 86400000)
+  const formatted = due.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+
+  if (props.task.status === 'Completed') return { label: formatted, overdue: false }
+  if (diffDays < 0) return { label: `${formatted} · Overdue`, overdue: true }
+  if (diffDays === 0) return { label: `${formatted} · Due today`, overdue: false, dueToday: true }
+  return { label: formatted, overdue: false }
+})
 </script>
 
 <template>
-  <li class="rounded-2xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5">
+  <li class="group bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 hover:shadow-md transition-shadow">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0 flex-1">
-        <div class="flex flex-wrap items-center gap-2">
-          <h3 class="break-words font-semibold text-foreground">{{ task.title }}</h3>
-          <span class="shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium" :class="statusStyles[task.status]">
-            {{ task.status }}
-          </span>
-          <span
-            v-if="isOverdue(task)"
-            class="shrink-0 rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive"
-          >
-            Overdue
-          </span>
+        <div class="flex flex-wrap items-center gap-2 mb-1.5">
+          <span class="px-2.5 py-1 rounded-full text-xs font-medium" :class="badgeClass">{{ task.status }}</span>
+          <span class="text-xs font-medium text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full truncate max-w-[10rem]">{{ task.subject }}</span>
         </div>
-        <p class="mt-1 text-sm text-muted-foreground">{{ task.subject }} • Due {{ formatDate(task.dueDate) }}</p>
-        <p v-if="task.description" class="mt-2 whitespace-pre-line break-words text-sm text-foreground/90">
-          {{ task.description }}
-        </p>
+        <h3 class="font-semibold text-slate-900 text-sm sm:text-base break-words">{{ task.title }}</h3>
+        <p v-if="task.description" class="text-sm text-slate-500 mt-1 line-clamp-3 break-words">{{ task.description }}</p>
+
+        <div class="flex items-center gap-1.5 mt-3 text-xs" :class="dueInfo.overdue ? 'text-rose-600 font-medium' : dueInfo.dueToday ? 'text-amber-600 font-medium' : 'text-slate-400'">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+          <span>{{ dueInfo.label }}</span>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-1.5 shrink-0">
+        <button
+          type="button"
+          class="w-9 h-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+          aria-label="Edit task"
+          @click="emit('edit', task)"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+        </button>
+        <button
+          type="button"
+          class="w-9 h-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+          aria-label="Delete task"
+          @click="emit('delete', task)"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6" /><path d="M10 11v6M14 11v6" /></svg>
+        </button>
       </div>
     </div>
 
-    <div class="mt-4 flex flex-wrap items-center gap-2">
-      <label class="sr-only" :for="`status-${task.id}`">Change status for {{ task.title }}</label>
-      <select
-        :id="`status-${task.id}`"
-        :value="task.status"
-        @change="emit('status-change', task.id, $event.target.value)"
-        class="min-h-[36px] rounded-lg border border-border bg-background px-2.5 py-2 text-xs font-medium text-foreground transition focus:outline-none focus:ring-2 focus:ring-ring"
-      >
-        <option value="Pending">Pending</option>
-        <option value="In Progress">In Progress</option>
-        <option value="Completed">Completed</option>
-      </select>
+    <div v-if="task.status !== 'Completed'" class="flex gap-2 mt-3 pt-3 border-t border-slate-100">
       <button
+        v-if="task.status === 'Pending'"
         type="button"
-        @click="emit('edit', task)"
-        class="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground transition hover:bg-muted"
+        class="text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+        @click="emit('status-change', task, 'In Progress')"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="h-3.5 w-3.5"
-          aria-hidden="true"
-        >
-          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-        </svg>
-        Edit
+        Start Task
       </button>
       <button
         type="button"
-        @click="emit('delete', task)"
-        class="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-destructive/30 px-3 py-2 text-xs font-medium text-destructive transition hover:bg-destructive/10"
+        class="text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+        @click="emit('status-change', task, 'Completed')"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="h-3.5 w-3.5"
-          aria-hidden="true"
-        >
-          <polyline points="3 6 5 6 21 6" />
-          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-          <path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-        </svg>
-        Delete
+        Mark Complete
       </button>
     </div>
   </li>

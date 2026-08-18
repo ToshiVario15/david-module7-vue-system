@@ -1,46 +1,36 @@
-export const STATUS_OPTIONS = ['Pending', 'In Progress', 'Completed']
+// Central validation logic for the Task entity.
+// Returns an object keyed by field name -> error message (empty object = valid).
 
-/**
- * Validate a task form payload.
- * @param {{title:string, description?:string, subject:string, dueDate:string, status:string}} form
- * @returns {{valid: boolean, errors: Record<string,string>}}
- */
-export function validateTask(form) {
+export function validateTask(task) {
   const errors = {}
 
-  const title = (form.title || '').trim()
-  if (!title) {
+  if (!task.title || !task.title.trim()) {
     errors.title = 'Title is required.'
-  } else if (title.length < 3) {
+  } else if (task.title.trim().length < 3) {
     errors.title = 'Title must be at least 3 characters.'
-  } else if (title.length > 100) {
-    errors.title = 'Title must be under 100 characters.'
+  } else if (task.title.trim().length > 80) {
+    errors.title = 'Title must be under 80 characters.'
   }
 
-  const subject = (form.subject || '').trim()
-  if (!subject) {
-    errors.subject = 'Subject is required.'
-  } else if (subject.length > 60) {
-    errors.subject = 'Subject must be under 60 characters.'
-  }
-
-  if (!form.dueDate) {
-    errors.dueDate = 'Due date is required.'
-  } else if (Number.isNaN(new Date(form.dueDate).getTime())) {
-    errors.dueDate = 'Enter a valid date.'
-  }
-
-  const description = (form.description || '').trim()
-  if (description.length > 500) {
+  if (task.description && task.description.length > 500) {
     errors.description = 'Description must be under 500 characters.'
   }
 
-  if (!STATUS_OPTIONS.includes(form.status)) {
-    errors.status = 'Please select a valid status.'
+  if (!task.subject || !task.subject.trim()) {
+    errors.subject = 'Subject is required.'
   }
 
-  return {
-    valid: Object.keys(errors).length === 0,
-    errors,
+  if (!task.dueDate) {
+    errors.dueDate = 'Due date is required.'
   }
+
+  if (!task.status) {
+    errors.status = 'Status is required.'
+  }
+
+  return errors
+}
+
+export function isValid(errors) {
+  return Object.keys(errors).length === 0
 }
